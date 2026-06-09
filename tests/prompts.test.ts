@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { Logger } from "../lib/logger"
-import { PromptStore } from "../lib/prompts/store"
+import { renderSystemPrompt } from "../lib/prompts"
+import { PromptStore, type RuntimePrompts } from "../lib/prompts/store"
 import { SYSTEM as SYSTEM_PROMPT } from "../lib/prompts/system"
 
 function createPromptStoreFixture(overrideContent?: string, overrideFileName = "system.md") {
@@ -161,4 +162,53 @@ test("prompt store exposes bundled range-mode compress prompt", () => {
     } finally {
         fixture.cleanup()
     }
+})
+
+function createMockRuntimePrompts(overrides?: Partial<RuntimePrompts>): RuntimePrompts {
+    return {
+        system: "system prompt",
+        compressRange: "",
+        compressMessage: "",
+        contextLimitNudge: "",
+        turnNudge: "",
+        iterationNudge: "",
+        manualExtension: "manual extension",
+        subagentExtension: "subagent extension",
+        belowThresholdExtension: "below threshold extension",
+        ...overrides,
+    }
+}
+
+test("renderSystemPrompt overMinLimit parameter", async (t) => {
+    await t.test("includes below-threshold extension when overMinLimit is false", () => {
+        const prompts = createMockRuntimePrompts()
+        const result = renderSystemPrompt(prompts, undefined, undefined, undefined, false)
+        assert.match(result, /below threshold extension/)
+    })
+
+    await t.test("omits below-threshold extension when overMinLimit is true", () => {
+        const prompts = createMockRuntimePrompts()
+        const result = renderSystemPrompt(prompts, undefined, undefined, undefined, true)
+        assert.doesNotMatch(result, /below threshold extension/)
+    })
+
+    await t.test("omits below-threshold extension when overMinLimit is undefined (backward compatible)", () => {
+        const prompts = createMockRuntimePrompts()
+        const result = renderSystemPrompt(prompts, undefined, undefined, undefined)
+        assert.doesNotMatch(result, /below threshold extension/)
+    })
+
+    await t.test("includes below-threshold extension alongside manual and subagent", () => {
+        const prompts = createMockRuntimePrompts()
+        const result = renderSystemPrompt(
+            prompts,
+            undefined,
+            true,
+            true,
+            false,
+        )
+        assert.match(result, /manual extension/)
+        assert.match(result, /subagent extension/)
+        assert.match(result, /below threshold extension/)
+    })
 })

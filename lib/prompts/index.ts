@@ -6,6 +6,7 @@ export function renderSystemPrompt(
     protectedToolsExtension?: string,
     manual?: boolean,
     subagent?: boolean,
+    overMinLimit?: boolean,
 ): string {
     const extensions: string[] = []
 
@@ -19,6 +20,11 @@ export function renderSystemPrompt(
 
     if (subagent) {
         extensions.push(prompts.subagentExtension.trim())
+    }
+
+    // Add below-threshold extension when explicitly below the minimum
+    if (overMinLimit !== undefined && !overMinLimit) {
+        extensions.push(prompts.belowThresholdExtension.trim())
     }
 
     return [prompts.system.trim(), ...extensions]

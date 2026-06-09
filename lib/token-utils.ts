@@ -26,12 +26,7 @@ export function getCurrentTokenUsage(state: SessionState, messages: WithParts[])
             return 0
         }
 
-        const input = assistantInfo.tokens?.input || 0
-        const output = assistantInfo.tokens?.output || 0
-        const reasoning = assistantInfo.tokens?.reasoning || 0
-        const cacheRead = assistantInfo.tokens?.cache?.read || 0
-        const cacheWrite = assistantInfo.tokens?.cache?.write || 0
-        return input + output + reasoning + cacheRead + cacheWrite
+        return assistantInfo.tokens?.input || 0
     }
 
     return 0

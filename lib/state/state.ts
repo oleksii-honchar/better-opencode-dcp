@@ -98,6 +98,7 @@ export function createSessionState(): SessionState {
         currentTurn: 0,
         modelContextLimit: undefined,
         systemPromptTokens: undefined,
+        overMinLimit: undefined,
     }
 }
 
@@ -132,6 +133,7 @@ export function resetSessionState(state: SessionState): void {
     state.currentTurn = 0
     state.modelContextLimit = undefined
     state.systemPromptTokens = undefined
+    state.overMinLimit = undefined
 }
 
 export async function ensureSessionInitialized(

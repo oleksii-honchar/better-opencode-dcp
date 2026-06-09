@@ -109,7 +109,7 @@ test("system prompt handler caches full model context for percentage thresholds"
         { system: ["base system"] },
     )
 
-    assert.equal(state.modelContextLimit, 200000)
+    assert.equal(state.modelContextLimit, 68928)
 })
 
 test("chat message transform strips hallucinated tags even when compress is denied", async () => {

@@ -9,6 +9,7 @@ import { CONTEXT_LIMIT_NUDGE } from "./context-limit-nudge"
 import { TURN_NUDGE } from "./turn-nudge"
 import { ITERATION_NUDGE } from "./iteration-nudge"
 import { MANUAL_MODE_SYSTEM_EXTENSION, SUBAGENT_SYSTEM_EXTENSION } from "./extensions/system"
+import { BELOW_THRESHOLD_EXTENSION } from "./extensions/system-below-threshold"
 
 export type PromptKey =
     | "system"
@@ -55,6 +56,7 @@ export interface RuntimePrompts {
     iterationNudge: string
     manualExtension: string
     subagentExtension: string
+    belowThresholdExtension: string
 }
 
 const PROMPT_DEFINITIONS: PromptDefinition[] = [
@@ -135,6 +137,7 @@ const BUNDLED_EDITABLE_PROMPTS: Record<EditablePromptField, string> = {
 const INTERNAL_PROMPT_EXTENSIONS = {
     manualExtension: MANUAL_MODE_SYSTEM_EXTENSION,
     subagentExtension: SUBAGENT_SYSTEM_EXTENSION,
+    belowThresholdExtension: BELOW_THRESHOLD_EXTENSION,
 }
 
 function createBundledRuntimePrompts(): RuntimePrompts {
@@ -147,6 +150,7 @@ function createBundledRuntimePrompts(): RuntimePrompts {
         iterationNudge: BUNDLED_EDITABLE_PROMPTS.iterationNudge,
         manualExtension: INTERNAL_PROMPT_EXTENSIONS.manualExtension,
         subagentExtension: INTERNAL_PROMPT_EXTENSIONS.subagentExtension,
+        belowThresholdExtension: INTERNAL_PROMPT_EXTENSIONS.belowThresholdExtension,
     }
 }
 

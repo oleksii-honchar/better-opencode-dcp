@@ -23,6 +23,7 @@ import {
     resolveCompressionDuration,
 } from "./compress/timing"
 import { filterMessages, filterMessagesInPlace } from "./messages/shape"
+import { getModelInfo, isContextOverLimits } from "./messages/inject/utils"
 import {
     applyPendingManualTrigger,
     handleContextCommand,
@@ -38,6 +39,7 @@ import { type HostPermissionSnapshot } from "./host-permissions"
 import { compressPermission, syncCompressPermissionState } from "./compress-permission"
 import { checkSession, ensureSessionInitialized, saveSessionState, syncToolCache } from "./state"
 import { cacheSystemPromptTokens } from "./ui/utils"
+import { computeInputBudget } from "./input-budget"
 
 const INTERNAL_AGENT_SIGNATURES = [
     "You are a title generator",
@@ -53,12 +55,12 @@ export function createSystemPromptHandler(
     prompts: PromptStore,
 ) {
     return async (
-        input: { sessionID?: string; model: { limit: { context: number } } },
+        input: { sessionID?: string; model: { limit: { context: number; input?: number; output?: number } } },
         output: { system: string[] },
     ) => {
         if (input.model?.limit?.context) {
-            state.modelContextLimit = input.model.limit.context
-            logger.debug("Cached model context limit", { limit: state.modelContextLimit })
+            state.modelContextLimit = computeInputBudget(input.model.limit)
+            logger.debug("Cached model input budget", { limit: state.modelContextLimit })
         }
 
         if (state.isSubAgent && !config.experimental.allowSubAgents) {
@@ -87,6 +89,7 @@ export function createSystemPromptHandler(
             buildProtectedToolsExtension(config.compress.protectedTools),
             !!state.manualMode,
             state.isSubAgent && config.experimental.allowSubAgents,
+            state.overMinLimit,
         )
         if (output.system.length > 0) {
             output.system[output.system.length - 1] += "\n\n" + newPrompt
@@ -146,6 +149,16 @@ export function createChatMessageTransformHandler(
             prompts.getRuntimePrompts(),
             compressionPriorities,
         )
+        // Cache overMinLimit for system prompt handler
+        const { providerId, modelId } = getModelInfo(output.messages)
+        const { overMinLimit } = isContextOverLimits(
+            config,
+            state,
+            providerId,
+            modelId,
+            output.messages,
+        )
+        state.overMinLimit = overMinLimit
         injectMessageIds(state, config, output.messages, compressionPriorities)
         applyPendingManualTrigger(state, output.messages, logger)
         stripStaleMetadata(output.messages)

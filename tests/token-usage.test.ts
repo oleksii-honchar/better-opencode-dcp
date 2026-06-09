@@ -230,12 +230,12 @@ test("isContextOverLimits ignores stale summary totals and resumes with fresh re
     assert.equal(underLimit.overMinLimit, false)
 
     messages.push(buildPostCompactionAssistantMessage())
-    const freshReportedTotal = 2400 + 600 + 150 + 300
+    const freshReportedInput = 2400
 
-    assert.equal(getCurrentTokenUsage(state, messages), freshReportedTotal)
+    assert.equal(getCurrentTokenUsage(state, messages), freshReportedInput)
 
     const overLimit = isContextOverLimits(
-        buildConfig(freshReportedTotal - 1, 1),
+        buildConfig(freshReportedInput - 1, 1),
         state,
         undefined,
         undefined,
@@ -256,10 +256,10 @@ test("isContextOverLimits extends the max threshold by active summary tokens", (
     state.prune.messages.blocksById.set(7, createActiveBlock(7, storedSummary, 1000))
     state.prune.messages.activeBlockIds.add(7)
 
-    const freshReportedTotal = 2400 + 600 + 150 + 300
+    const freshReportedInput = 2400
 
     const underExtendedLimit = isContextOverLimits(
-        buildConfig(freshReportedTotal - 1, 1),
+        buildConfig(freshReportedInput - 1, 1),
         state,
         undefined,
         undefined,
@@ -269,7 +269,7 @@ test("isContextOverLimits extends the max threshold by active summary tokens", (
     assert.equal(underExtendedLimit.overMaxLimit, false)
 
     const overExtendedLimit = isContextOverLimits(
-        buildConfig(freshReportedTotal - 1001, 1),
+        buildConfig(freshReportedInput - 1001, 1),
         state,
         undefined,
         undefined,
@@ -290,8 +290,8 @@ test("isContextOverLimits does not extend the max threshold when summaryBuffer i
     state.prune.messages.blocksById.set(7, createActiveBlock(7, storedSummary, 1000))
     state.prune.messages.activeBlockIds.add(7)
 
-    const freshReportedTotal = 2400 + 600 + 150 + 300
-    const config = buildConfig(freshReportedTotal - 1, 1)
+    const freshReportedInput = 2400
+    const config = buildConfig(freshReportedInput - 1, 1)
     config.compress.summaryBuffer = false
 
     const overLimit = isContextOverLimits(config, state, undefined, undefined, messages)
