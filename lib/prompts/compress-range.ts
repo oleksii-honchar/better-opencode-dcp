@@ -9,6 +9,9 @@ Directly quote user messages when they are short enough to include safely. Direc
 
 Yet be LEAN. Strip away the noise: failed attempts that led nowhere, verbose tool outputs, back-and-forth exploration. What remains should be pure signal - golden nuggets of detail that preserve full understanding with zero ambiguity.
 
+SESSION CONTEXT
+Capture and retain session identity in every summary. Include the session folder name, session ID, workspace folder path, and any session-scoped configuration that identifies which session this context belongs to. After compaction, the agent must still know which session it operates in. Without this, continuing an old session will leave the agent disoriented and unable to access its own session artifacts.
+
 COMPRESSED BLOCK PLACEHOLDERS
 When the selected range includes previously compressed blocks, use this exact placeholder format when referencing one:
 

@@ -10,6 +10,9 @@ Directly quote short user instructions when that best preserves exact meaning.
 Yet be LEAN. Strip away the noise: failed attempts that led nowhere, verbose tool output, and repetition. What remains should be pure signal - golden nuggets of detail that preserve full understanding with zero ambiguity.
 If a message contains no significant technical decisions, code changes, or user requirements, produce a minimal one-line summary rather than a detailed one.
 
+SESSION CONTEXT
+Capture and retain session identity in every summary. Include the session folder name, session ID, workspace folder path, and any session-scoped configuration that identifies which session this context belongs to. After compaction, the agent must still know which session it operates in. Without this, continuing an old session will leave the agent disoriented and unable to access its own session artifacts.
+
 MESSAGE IDS
 You specify individual raw messages by ID using the injected IDs visible in the conversation:
 
