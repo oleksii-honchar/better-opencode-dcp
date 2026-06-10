@@ -99,9 +99,9 @@ export function createSessionState(): SessionState {
         modelContextLimit: undefined,
         systemPromptTokens: undefined,
         overMinLimit: undefined,
+        dcpPromptInjected: false,
     }
 }
-
 export function resetSessionState(state: SessionState): void {
     state.sessionId = null
     state.isSubAgent = false
@@ -134,6 +134,7 @@ export function resetSessionState(state: SessionState): void {
     state.modelContextLimit = undefined
     state.systemPromptTokens = undefined
     state.overMinLimit = undefined
+    state.dcpPromptInjected = false
 }
 
 export async function ensureSessionInitialized(

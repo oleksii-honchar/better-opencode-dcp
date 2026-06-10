@@ -12,6 +12,7 @@ import { Logger } from "../lib/logger"
 import {
     createSessionState,
     ensureSessionInitialized,
+    resetSessionState,
     saveSessionState,
     type WithParts,
 } from "../lib/state"
@@ -110,6 +111,218 @@ test("system prompt handler caches full model context for percentage thresholds"
     )
 
     assert.equal(state.modelContextLimit, 68928)
+})
+
+test("system prompt handler dedup guard skips injection on subsequent calls", async () => {
+    const state = createSessionState()
+    const handler = createSystemPromptHandler(state, new Logger(false), buildConfig("allow"), {
+        reload() {},
+        getRuntimePrompts() {
+            return { system: "runtime prompt" } as any
+        },
+    } as any)
+
+    const output = { system: ["base system"] }
+
+    // First call — should inject the system prompt
+    await handler(
+        {
+            sessionID: "session-1",
+            model: {
+                limit: {
+                    context: 200000,
+                    output: 131072,
+                },
+            },
+        } as any,
+        output,
+    )
+
+    const afterFirstCall = output.system[output.system.length - 1]
+    assert.ok(afterFirstCall.includes("base system"), "first call should have base system")
+    assert.ok(afterFirstCall.length > "base system".length, "first call should append system prompt")
+    assert.equal(state.dcpPromptInjected, true, "dcpPromptInjected should be true after first call")
+
+    // Second call — should NOT inject the system prompt again
+    const snapshot = [...output.system]
+    await handler(
+        {
+            sessionID: "session-1",
+            model: {
+                limit: {
+                    context: 200000,
+                    output: 131072,
+                },
+            },
+        } as any,
+        output,
+    )
+
+    assert.deepEqual(output.system, snapshot, "output.system should not change on second call")
+})
+
+test("session state creates with dcpPromptInjected defaulting to false", () => {
+    const state = createSessionState()
+
+    assert.equal(state.dcpPromptInjected, false)
+})
+
+test("session state resets dcpPromptInjected to false", () => {
+    const state = createSessionState()
+    state.dcpPromptInjected = true
+
+    resetSessionState(state)
+
+    assert.equal(state.dcpPromptInjected, false)
+})
+
+test("system prompt handler with empty system array pushes new entry", async () => {
+    const state = createSessionState()
+    const handler = createSystemPromptHandler(state, new Logger(false), buildConfig("allow"), {
+        reload() {},
+        getRuntimePrompts() {
+            return { system: "runtime prompt" } as any
+        },
+    } as any)
+
+    const output = { system: [] as string[] }
+
+    await handler(
+        {
+            sessionID: "session-1",
+            model: {
+                limit: { context: 200000, output: 131072 },
+            },
+        } as any,
+        output,
+    )
+
+    assert.equal(output.system.length, 1)
+    assert.ok(output.system[0].includes("runtime prompt"), "should contain rendered prompt text")
+    assert.equal(state.dcpPromptInjected, true)
+})
+
+test("system prompt handler with flag already true skips injection and leaves system unchanged", async () => {
+    const state = createSessionState()
+    state.dcpPromptInjected = true
+    const handler = createSystemPromptHandler(state, new Logger(false), buildConfig("allow"), {
+        reload() {},
+        getRuntimePrompts() {
+            return { system: "runtime prompt" } as any
+        },
+    } as any)
+
+    const output = { system: ["base system"] }
+    const snapshot = [...output.system]
+
+    await handler(
+        {
+            sessionID: "session-1",
+            model: {
+                limit: { context: 200000, output: 131072 },
+            },
+        } as any,
+        output,
+    )
+
+    assert.deepEqual(output.system, snapshot, "output.system should remain unchanged")
+    assert.equal(state.dcpPromptInjected, true, "flag should stay true")
+})
+
+test("system prompt handler injects again after resetSessionState", async () => {
+    const state = createSessionState()
+    const handler = createSystemPromptHandler(state, new Logger(false), buildConfig("allow"), {
+        reload() {},
+        getRuntimePrompts() {
+            return { system: "runtime prompt" } as any
+        },
+    } as any)
+
+    // First call — injects the prompt
+    const output1 = { system: ["base system"] }
+    await handler(
+        {
+            sessionID: "session-1",
+            model: {
+                limit: { context: 200000, output: 131072 },
+            },
+        } as any,
+        output1,
+    )
+
+    assert.equal(state.dcpPromptInjected, true)
+    assert.ok(output1.system[0].includes("base system"))
+    assert.ok(output1.system[0].length > "base system".length, "first call should append system prompt")
+
+    // Reset state — flag resets to false
+    resetSessionState(state)
+    assert.equal(state.dcpPromptInjected, false)
+
+    // Second call — should inject again
+    const output2 = { system: ["base system"] }
+    await handler(
+        {
+            sessionID: "session-1",
+            model: {
+                limit: { context: 200000, output: 131072 },
+            },
+        } as any,
+        output2,
+    )
+
+    assert.equal(state.dcpPromptInjected, true)
+    assert.ok(output2.system[0].includes("base system"))
+    assert.ok(output2.system[0].length > "base system".length, "second call should also append system prompt after reset")
+})
+
+test("system prompt handler with internal agent signature skips injection regardless of flag", async () => {
+    const state = createSessionState()
+    const handler = createSystemPromptHandler(state, new Logger(false), buildConfig("allow"), {
+        reload() {},
+        getRuntimePrompts() {
+            return { system: "runtime prompt" } as any
+        },
+    } as any)
+
+    const output = { system: ["You are a title generator"] }
+
+    await handler(
+        {
+            sessionID: "session-1",
+            model: {
+                limit: { context: 200000, output: 131072 },
+            },
+        } as any,
+        output,
+    )
+
+    assert.deepEqual(output.system, ["You are a title generator"], "system should remain unchanged")
+    assert.equal(state.dcpPromptInjected, false, "flag should remain false since injection never happened")
+})
+
+test("system prompt handler compresses permission deny skips injection regardless of flag", async () => {
+    const state = createSessionState()
+    const handler = createSystemPromptHandler(state, new Logger(false), buildConfig("deny"), {
+        reload() {},
+        getRuntimePrompts() {
+            return { system: "runtime prompt" } as any
+        },
+    } as any)
+
+    const output = { system: ["base system"] }
+
+    await handler(
+        {
+            sessionID: "session-1",
+            model: {
+                limit: { context: 200000, output: 131072 },
+            },
+        } as any,
+        output,
+    )
+
+    assert.deepEqual(output.system, ["base system"], "system should remain unchanged")
+    assert.equal(state.dcpPromptInjected, false, "flag should remain false since injection never happened")
 })
 
 test("chat message transform strips hallucinated tags even when compress is denied", async () => {

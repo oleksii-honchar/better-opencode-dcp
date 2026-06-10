@@ -82,19 +82,22 @@ export function createSystemPromptHandler(
             return
         }
 
-        prompts.reload()
-        const runtimePrompts = prompts.getRuntimePrompts()
-        const newPrompt = renderSystemPrompt(
-            runtimePrompts,
-            buildProtectedToolsExtension(config.compress.protectedTools),
-            !!state.manualMode,
-            state.isSubAgent && config.experimental.allowSubAgents,
-            state.overMinLimit,
-        )
-        if (output.system.length > 0) {
-            output.system[output.system.length - 1] += "\n\n" + newPrompt
-        } else {
-            output.system.push(newPrompt)
+        if (!state.dcpPromptInjected) {
+            prompts.reload()
+            const runtimePrompts = prompts.getRuntimePrompts()
+            const newPrompt = renderSystemPrompt(
+                runtimePrompts,
+                buildProtectedToolsExtension(config.compress.protectedTools),
+                !!state.manualMode,
+                state.isSubAgent && config.experimental.allowSubAgents,
+                state.overMinLimit,
+            )
+            if (output.system.length > 0) {
+                output.system[output.system.length - 1] += "\n\n" + newPrompt
+            } else {
+                output.system.push(newPrompt)
+            }
+            state.dcpPromptInjected = true
         }
     }
 }

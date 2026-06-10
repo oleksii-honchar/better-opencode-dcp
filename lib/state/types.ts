@@ -109,4 +109,5 @@ export interface SessionState {
     modelContextLimit: number | undefined
     systemPromptTokens: number | undefined
     overMinLimit: boolean | undefined
+    dcpPromptInjected: boolean
 }

@@ -14,3 +14,4 @@ Decisions about how the better-opencode-dcp fork is built, configured, and maint
 
 - [[0001-input-tokens-only.adr.md]] — ADR-0001: Use input tokens only for threshold comparison (status: accepted)
 - [[0002-fork-dcp-plugin.adr.md]] — ADR-0002: Fork DCP plugin instead of patching upstream (status: accepted)
+- [[0003-system-prompt-dedup.adr.md]] — ADR-0003: Session-Level Flag for System Prompt Deduplication (status: accepted)
