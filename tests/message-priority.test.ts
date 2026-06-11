@@ -194,7 +194,7 @@ test("injectMessageIds injects ID into every tool output for assistant messages"
     assignMessageRefs(state, messages)
     const compressionPriorities = buildPriorityMap(config, state, messages)
 
-    injectMessageIds(state, config, messages, compressionPriorities)
+    injectMessageIds(state, config, messages)
 
     assert.equal(messages[0]?.parts.length, 2)
     assert.equal(messages[1]?.parts.length, 4)
@@ -212,14 +212,14 @@ test("injectMessageIds injects ID into every tool output for assistant messages"
     assert.equal(assistantToolOne?.type, "tool")
     assert.equal(assistantTextTwo?.type, "text")
     assert.equal(assistantToolTwo?.type, "tool")
-    // User messages: still injected into all text parts
+    // User messages: still injected into all text parts (no priority attribute)
     assert.match(
         (userTextOne as any).text,
-        /\n\n<dcp-message-id priority="high">m0001<\/dcp-message-id>/,
+        /\n\n<dcp-message-id>m0001<\/dcp-message-id>/,
     )
     assert.match(
         (userTextTwo as any).text,
-        /\n\n<dcp-message-id priority="high">m0001<\/dcp-message-id>/,
+        /\n\n<dcp-message-id>m0001<\/dcp-message-id>/,
     )
     // Assistant messages: ID injected into every tool output
     assert.doesNotMatch((assistantTextOne as any).text, /dcp-message-id/)
@@ -262,7 +262,7 @@ test("injectMessageIds marks every protected user text part as BLOCKED in messag
     assignMessageRefs(state, messages)
     const compressionPriorities = buildPriorityMap(config, state, messages)
 
-    injectMessageIds(state, config, messages, compressionPriorities)
+    injectMessageIds(state, config, messages)
 
     const userTextOne = messages[0]?.parts[0]
     const userTextTwo = messages[0]?.parts[1]
@@ -277,7 +277,7 @@ test("injectMessageIds marks every protected user text part as BLOCKED in messag
     assert.doesNotMatch((userTextTwo as any).text, /priority=/)
     assert.match(
         (assistantText as any).text,
-        /\n\n<dcp-message-id priority="low">m0002<\/dcp-message-id>/,
+        /\n\n<dcp-message-id>m0002<\/dcp-message-id>/,
     )
 })
 
@@ -357,7 +357,7 @@ test("message mode marks compress tool messages as high priority even when short
 
     assert.equal(compressionPriorities.get("msg-assistant-1")?.priority, "high")
 
-    injectMessageIds(state, config, messages, compressionPriorities)
+    injectMessageIds(state, config, messages)
 
     const assistantText = messages[1]?.parts[0]
     const assistantTool = messages[1]?.parts[1]
@@ -367,7 +367,7 @@ test("message mode marks compress tool messages as high priority even when short
     assert.match((assistantTool as any).state.output, /m0002<\/dcp-message-id>/)
     assert.match(
         (assistantTool as any).state.output,
-        /<dcp-message-id priority="high">m0002<\/dcp-message-id>/,
+        /<dcp-message-id>m0002<\/dcp-message-id>/,
     )
 })
 
@@ -913,4 +913,336 @@ test("injectMessageIds skips assistant with empty text part (issue #463)", () =>
         "",
         "empty text part should remain untouched",
     )
+})
+
+test("applyAnchoredNudges is idempotent — message nudged at most once per session", () => {
+    const sessionID = "ses_nudge_idempotent"
+    const messages: WithParts[] = [
+        buildMessage("msg-user-1", "user", sessionID, repeatedWord("alpha", 6000), 1),
+        buildMessage("msg-assistant-1", "assistant", sessionID, repeatedWord("beta", 6000), 2),
+        buildMessage("msg-user-2", "user", sessionID, repeatedWord("gamma", 6000), 3),
+    ]
+    const state = createSessionState()
+    const config = buildConfig()
+
+    assignMessageRefs(state, messages)
+    state.nudges.contextLimitAnchors.add("msg-user-2")
+
+    const prompts = {
+        system: "",
+        compressRange: "",
+        compressMessage: "",
+        contextLimitNudge: "<dcp-system-reminder>Base context nudge</dcp-system-reminder>",
+        turnNudge: "<dcp-system-reminder>Base turn nudge</dcp-system-reminder>",
+        iterationNudge: "<dcp-system-reminder>Base iteration nudge</dcp-system-reminder>",
+    }
+
+    const compressionPriorities = buildPriorityMap(config, state, messages)
+
+    // First invocation — nudge should be injected
+    applyAnchoredNudges(state, config, messages, prompts, compressionPriorities)
+
+    const firstText = (messages[2]?.parts[0] as any).text
+    assert.match(firstText, /Base context nudge/, "first invocation should inject nudge")
+
+    // Count how many times the nudge appears after first invocation
+    const firstMatches = firstText.match(/Base context nudge/g)
+    const firstCount = firstMatches ? firstMatches.length : 0
+
+    // Second invocation — should NOT inject again
+    applyAnchoredNudges(state, config, messages, prompts, compressionPriorities)
+
+    const secondText = (messages[2]?.parts[0] as any).text
+    const secondMatches = secondText.match(/Base context nudge/g)
+    const secondCount = secondMatches ? secondMatches.length : 0
+
+    assert.equal(
+        secondCount,
+        firstCount,
+        "second invocation must not add additional nudge text",
+    )
+
+    // The message ID should be tracked
+    assert.ok(
+        state.nudges.nudgedMessageIds.has("msg-user-2"),
+        "nudged message ID should be tracked",
+    )
+})
+
+test("injectMessageIds produces stable tags across invocations — no priority attribute (DCP cache stability)", () => {
+    const sessionID = "ses_stable_tags"
+    const messages: WithParts[] = [
+        buildMessage("msg-user-1", "user", sessionID, "Hello", 1),
+        buildMessage("msg-assistant-1", "assistant", sessionID, "Hi there", 2),
+    ]
+    const state = createSessionState()
+    const config = buildConfig()
+
+    assignMessageRefs(state, messages)
+
+    // First invocation
+    injectMessageIds(state, config, messages)
+    const firstTag = (messages[0]?.parts[0] as any).text
+
+    // Reset parts to original text and re-inject (simulating a second LLM request)
+    messages[0]!.parts = [textPart("msg-user-1", sessionID, "msg-user-1-part", "Hello")]
+    messages[1]!.parts = [textPart("msg-assistant-1", sessionID, "msg-assistant-1-part", "Hi there")]
+
+    // Second invocation — tag must be identical
+    injectMessageIds(state, config, messages)
+    const secondTag = (messages[0]?.parts[0] as any).text
+
+    // Tags must be identical across invocations
+    assert.equal(firstTag, secondTag, "tags must be identical across invocations")
+
+    // No priority attribute in the tag — it would cause cache invalidation
+    assert.doesNotMatch(firstTag, /priority=/, "tag must not contain priority attribute")
+
+    // Tag format: <dcp-message-id>m0001</dcp-message-id> (no attributes)
+    assert.match(firstTag, /<dcp-message-id>m0001<\/dcp-message-id>/)
+})
+
+// --- Idempotent Prune Tests ---
+
+const PRUNED_TOOL_OUTPUT_REPLACEMENT =
+    "[Output removed to save context - information superseded or no longer needed]"
+const PRUNED_TOOL_ERROR_INPUT_REPLACEMENT = "[input removed due to failed tool call]"
+const PRUNED_QUESTION_INPUT_REPLACEMENT = "[questions removed - see output for user's answers]"
+
+function toolPartWithStatus(
+    messageID: string,
+    sessionID: string,
+    callID: string,
+    toolName: string,
+    output: string,
+    status: "completed" | "error",
+    input: Record<string, unknown> = { description: "demo" },
+) {
+    return {
+        id: `${callID}-part`,
+        messageID,
+        sessionID,
+        type: "tool" as const,
+        tool: toolName,
+        callID,
+        state: {
+            status,
+            input,
+            output: status === "completed" ? output : undefined,
+        },
+    }
+}
+
+test("prune is idempotent — running twice produces identical output", () => {
+    const sessionID = "ses_prune_idempotent"
+    const messages: WithParts[] = [
+        buildMessage("msg-user-1", "user", sessionID, "Hello", 1),
+        {
+            info: {
+                id: "msg-assistant-1",
+                role: "assistant",
+                sessionID,
+                agent: "assistant",
+                time: { created: 2 },
+            } as WithParts["info"],
+            parts: [
+                textPart("msg-assistant-1", sessionID, "msg-assistant-1-part", "Working..."),
+                toolPartWithStatus(
+                    "msg-assistant-1",
+                    sessionID,
+                    "call-bash-1",
+                    "bash",
+                    "original output content",
+                    "completed",
+                    { command: "ls" },
+                ),
+                toolPartWithStatus(
+                    "msg-assistant-1",
+                    sessionID,
+                    "call-question-1",
+                    "question",
+                    "user answered",
+                    "completed",
+                    { questions: "What would you like to do?" },
+                ),
+                toolPartWithStatus(
+                    "msg-assistant-1",
+                    sessionID,
+                    "call-failed-1",
+                    "bash",
+                    undefined,
+                    "error",
+                    { command: "failing command", filePath: "/some/path" },
+                ),
+            ],
+        },
+    ]
+    const state = createSessionState()
+    const config = buildConfig()
+    const logger = new Logger(false)
+
+    // Mark all callIDs for pruning
+    state.prune.tools.set("call-bash-1", 1)
+    state.prune.tools.set("call-question-1", 2)
+    state.prune.tools.set("call-failed-1", 3)
+
+    // First prune
+    prune(state, logger, config, messages)
+
+    // Capture state after first prune
+    const afterFirst = JSON.parse(JSON.stringify(messages))
+
+    // Second prune — should produce identical output
+    prune(state, logger, config, messages)
+
+    const afterSecond = JSON.parse(JSON.stringify(messages))
+
+    assert.deepStrictEqual(
+        afterFirst,
+        afterSecond,
+        "prune must be idempotent — second run produces identical output",
+    )
+
+    // Verify the actual replacements happened
+    const assistantMsg = afterSecond[1]
+    const bashPart = assistantMsg.parts[1]
+    const questionPart = assistantMsg.parts[2]
+    const failedPart = assistantMsg.parts[3]
+
+    assert.equal(
+        bashPart.state.output,
+        PRUNED_TOOL_OUTPUT_REPLACEMENT,
+        "tool output must be pruned",
+    )
+    assert.equal(
+        questionPart.state.input.questions,
+        PRUNED_QUESTION_INPUT_REPLACEMENT,
+        "question input must be pruned",
+    )
+    assert.equal(
+        failedPart.state.input.command,
+        PRUNED_TOOL_ERROR_INPUT_REPLACEMENT,
+        "error tool input must be pruned",
+    )
+    assert.equal(
+        failedPart.state.input.filePath,
+        PRUNED_TOOL_ERROR_INPUT_REPLACEMENT,
+        "error tool filePath must be pruned",
+    )
+})
+
+test("pruneToolOutputs skips already-pruned output — no re-assignment", () => {
+    const sessionID = "ses_prune_output_skip"
+    const messages: WithParts[] = [
+        {
+            info: {
+                id: "msg-assistant-1",
+                role: "assistant",
+                sessionID,
+                agent: "assistant",
+                time: { created: 1 },
+            } as WithParts["info"],
+            parts: [
+                toolPartWithStatus(
+                    "msg-assistant-1",
+                    sessionID,
+                    "call-bash-1",
+                    "bash",
+                    PRUNED_TOOL_OUTPUT_REPLACEMENT,
+                    "completed",
+                    { command: "ls" },
+                ),
+            ],
+        },
+    ]
+    const state = createSessionState()
+    const config = buildConfig()
+    const logger = new Logger(false)
+
+    state.prune.tools.set("call-bash-1", 1)
+
+    // The output is already the pruned replacement — prune should skip it
+    prune(state, logger, config, messages)
+
+    // Output should still be the placeholder (unchanged)
+    const output = (messages[0]?.parts[0] as any).state.output
+    assert.equal(output, PRUNED_TOOL_OUTPUT_REPLACEMENT)
+})
+
+test("pruneToolInputs skips already-pruned question input — no re-assignment", () => {
+    const sessionID = "ses_prune_question_skip"
+    const messages: WithParts[] = [
+        {
+            info: {
+                id: "msg-assistant-1",
+                role: "assistant",
+                sessionID,
+                agent: "assistant",
+                time: { created: 1 },
+            } as WithParts["info"],
+            parts: [
+                toolPartWithStatus(
+                    "msg-assistant-1",
+                    sessionID,
+                    "call-question-1",
+                    "question",
+                    "user answered",
+                    "completed",
+                    { questions: PRUNED_QUESTION_INPUT_REPLACEMENT },
+                ),
+            ],
+        },
+    ]
+    const state = createSessionState()
+    const config = buildConfig()
+    const logger = new Logger(false)
+
+    state.prune.tools.set("call-question-1", 1)
+
+    // The questions field is already the pruned replacement — prune should skip it
+    prune(state, logger, config, messages)
+
+    const questions = (messages[0]?.parts[0] as any).state.input.questions
+    assert.equal(questions, PRUNED_QUESTION_INPUT_REPLACEMENT)
+})
+
+test("pruneToolErrors skips already-pruned error inputs — no re-assignment", () => {
+    const sessionID = "ses_prune_error_skip"
+    const messages: WithParts[] = [
+        {
+            info: {
+                id: "msg-assistant-1",
+                role: "assistant",
+                sessionID,
+                agent: "assistant",
+                time: { created: 1 },
+            } as WithParts["info"],
+            parts: [
+                toolPartWithStatus(
+                    "msg-assistant-1",
+                    sessionID,
+                    "call-failed-1",
+                    "bash",
+                    undefined,
+                    "error",
+                    {
+                        command: PRUNED_TOOL_ERROR_INPUT_REPLACEMENT,
+                        filePath: PRUNED_TOOL_ERROR_INPUT_REPLACEMENT,
+                    },
+                ),
+            ],
+        },
+    ]
+    const state = createSessionState()
+    const config = buildConfig()
+    const logger = new Logger(false)
+
+    state.prune.tools.set("call-failed-1", 1)
+
+    // All string inputs are already the pruned replacement — prune should skip them
+    prune(state, logger, config, messages)
+
+    const input = (messages[0]?.parts[0] as any).state.input
+    assert.equal(input.command, PRUNED_TOOL_ERROR_INPUT_REPLACEMENT)
+    assert.equal(input.filePath, PRUNED_TOOL_ERROR_INPUT_REPLACEMENT)
 })

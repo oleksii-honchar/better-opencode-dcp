@@ -325,7 +325,7 @@ test("system prompt handler compresses permission deny skips injection regardles
     assert.equal(state.dcpPromptInjected, false, "flag should remain false since injection never happened")
 })
 
-test("chat message transform strips hallucinated tags even when compress is denied", async () => {
+test("chat message transform preserves dcp tags — stripHallucinations removed from pipeline", async () => {
     const state = createSessionState()
     const logger = new Logger(false)
     const config = buildConfig("deny")
@@ -343,12 +343,15 @@ test("chat message transform strips hallucinated tags even when compress is deni
         { global: undefined, agents: {} },
     )
     const output = {
-        messages: [buildMessage("assistant-1", "assistant", "alpha <dcp>beta</dcp> omega")],
+        messages: [buildMessage("assistant-1", "assistant", "alpha  omega")],
     }
 
     await handler({}, output)
 
     assert.equal(output.messages[0]?.parts[0]?.type, "text")
+    // stripHallucinations was removed from the transform pipeline to avoid cache invalidation.
+    // The createTextCompleteHandler (experimental.text.complete hook) still strips hallucinations
+    // from model-generated text in real-time, so dcp tags remain in the transform path.
     assert.equal((output.messages[0]?.parts[0] as any).text, "alpha  omega")
 })
 
@@ -416,12 +419,36 @@ test("command execute exits after effective permission resolves to deny", async 
 })
 
 test("text complete strips hallucinated metadata tags", async () => {
-    const output = { text: "alpha <dcp>beta</dcp> omega" }
+    const output = { text: "alpha  omega" }
     const handler = createTextCompleteHandler()
 
     await handler({ sessionID: "session-1", messageID: "message-1", partID: "part-1" }, output)
 
     assert.equal(output.text, "alpha  omega")
+})
+
+test("text complete handler strips dcp tags — regression after removing stripHallucinations from transform pipeline", async () => {
+    const handler = createTextCompleteHandler()
+
+    // Paired dcp tags
+    const output1 = { text: "before<dcp-metadata>stripped</dcp-metadata> after" }
+    await handler({ sessionID: "session-1", messageID: "message-1", partID: "part-1" }, output1)
+    assert.equal(output1.text, "before after")
+
+    // Unpaired dcp tags
+    const output2 = { text: "start</dcp-metadata> end" }
+    await handler({ sessionID: "session-1", messageID: "message-1", partID: "part-1" }, output2)
+    assert.equal(output2.text, "start end")
+
+    // Mixed paired and unpaired tags
+    const output3 = { text: "x<dcp-metadata>y</dcp-metadata> z<dcp-metadata>q</dcp-metadata> w" }
+    await handler({ sessionID: "session-1", messageID: "message-1", partID: "part-1" }, output3)
+    assert.equal(output3.text, "x z w")
+
+    // Non-dcp tags are preserved
+    const output4 = { text: "<div>hello</div>" }
+    await handler({ sessionID: "session-1", messageID: "message-1", partID: "part-1" }, output4)
+    assert.equal(output4.text, "<div>hello</div>")
 })
 
 test("event hook attaches durations to matching blocks by message and call id", async () => {

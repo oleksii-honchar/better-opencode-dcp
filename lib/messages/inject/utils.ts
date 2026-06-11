@@ -208,17 +208,27 @@ function buildMessagePriorityGuidance(
     return renderMessagePriorityGuidance(priorityLabel, refs)
 }
 
-function injectAnchoredNudge(message: WithParts, nudgeText: string): void {
+function injectAnchoredNudge(
+    state: SessionState,
+    message: WithParts,
+    nudgeText: string,
+): void {
     if (!nudgeText.trim()) {
+        return
+    }
+
+    if (state.nudges.nudgedMessageIds.has(message.info.id)) {
         return
     }
 
     if (message.info.role === "user") {
         if (appendToLastTextPart(message, nudgeText)) {
+            state.nudges.nudgedMessageIds.add(message.info.id)
             return
         }
 
         message.parts.push(createSyntheticTextPart(message, nudgeText))
+        state.nudges.nudgedMessageIds.add(message.info.id)
         return
     }
 
@@ -233,6 +243,7 @@ function injectAnchoredNudge(message: WithParts, nudgeText: string): void {
     for (const part of message.parts) {
         if (part.type === "text") {
             if (appendToTextPart(part, nudgeText)) {
+                state.nudges.nudgedMessageIds.add(message.info.id)
                 return
             }
         }
@@ -245,6 +256,7 @@ function injectAnchoredNudge(message: WithParts, nudgeText: string): void {
     } else {
         message.parts.splice(firstToolIndex, 0, syntheticPart)
     }
+    state.nudges.nudgedMessageIds.add(message.info.id)
 }
 
 function collectAnchoredMessages(
@@ -288,6 +300,7 @@ function collectTurnNudgeAnchors(
 }
 
 function applyRangeModeAnchoredNudge(
+    state: SessionState,
     anchorMessageIds: Set<string>,
     messages: WithParts[],
     baseNudgeText: string,
@@ -299,11 +312,12 @@ function applyRangeModeAnchoredNudge(
     }
 
     for (const { message } of collectAnchoredMessages(anchorMessageIds, messages)) {
-        injectAnchoredNudge(message, nudgeText)
+        injectAnchoredNudge(state, message, nudgeText)
     }
 }
 
 function applyMessageModeAnchoredNudge(
+    state: SessionState,
     anchorMessageIds: Set<string>,
     messages: WithParts[],
     baseNudgeText: string,
@@ -317,7 +331,7 @@ function applyMessageModeAnchoredNudge(
             MESSAGE_MODE_NUDGE_PRIORITY,
         )
         const nudgeText = appendGuidanceToDcpTag(baseNudgeText, priorityGuidance)
-        injectAnchoredNudge(message, nudgeText)
+        injectAnchoredNudge(state, message, nudgeText)
     }
 }
 
@@ -332,18 +346,21 @@ export function applyAnchoredNudges(
 
     if (config.compress.mode === "message") {
         applyMessageModeAnchoredNudge(
+            state,
             state.nudges.contextLimitAnchors,
             messages,
             prompts.contextLimitNudge,
             compressionPriorities,
         )
         applyMessageModeAnchoredNudge(
+            state,
             turnNudgeAnchors,
             messages,
             prompts.turnNudge,
             compressionPriorities,
         )
         applyMessageModeAnchoredNudge(
+            state,
             state.nudges.iterationNudgeAnchors,
             messages,
             prompts.iterationNudge,
@@ -354,18 +371,21 @@ export function applyAnchoredNudges(
 
     const compressedBlockGuidance = buildCompressedBlockGuidance(state)
     applyRangeModeAnchoredNudge(
+        state,
         state.nudges.contextLimitAnchors,
         messages,
         prompts.contextLimitNudge,
         compressedBlockGuidance,
     )
     applyRangeModeAnchoredNudge(
+        state,
         turnNudgeAnchors,
         messages,
         prompts.turnNudge,
         compressedBlockGuidance,
     )
     applyRangeModeAnchoredNudge(
+        state,
         state.nudges.iterationNudgeAnchors,
         messages,
         prompts.iterationNudge,

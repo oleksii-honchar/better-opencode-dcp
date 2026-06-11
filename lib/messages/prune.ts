@@ -91,7 +91,9 @@ const pruneToolOutputs = (state: SessionState, logger: Logger, messages: WithPar
                 continue
             }
 
-            part.state.output = PRUNED_TOOL_OUTPUT_REPLACEMENT
+            if (part.state.output !== PRUNED_TOOL_OUTPUT_REPLACEMENT) {
+                part.state.output = PRUNED_TOOL_OUTPUT_REPLACEMENT
+            }
         }
     }
 }
@@ -118,7 +120,10 @@ const pruneToolInputs = (state: SessionState, logger: Logger, messages: WithPart
                 continue
             }
 
-            if (part.state.input?.questions !== undefined) {
+            if (
+                part.state.input?.questions !== undefined &&
+                part.state.input.questions !== PRUNED_QUESTION_INPUT_REPLACEMENT
+            ) {
                 part.state.input.questions = PRUNED_QUESTION_INPUT_REPLACEMENT
             }
         }
@@ -147,7 +152,10 @@ const pruneToolErrors = (state: SessionState, logger: Logger, messages: WithPart
             const input = part.state.input
             if (input && typeof input === "object") {
                 for (const key of Object.keys(input)) {
-                    if (typeof input[key] === "string") {
+                    if (
+                        typeof input[key] === "string" &&
+                        input[key] !== PRUNED_TOOL_ERROR_INPUT_REPLACEMENT
+                    ) {
                         input[key] = PRUNED_TOOL_ERROR_INPUT_REPLACEMENT
                     }
                 }

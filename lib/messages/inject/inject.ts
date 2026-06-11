@@ -146,7 +146,6 @@ export const injectMessageIds = (
     state: SessionState,
     config: PluginConfig,
     messages: WithParts[],
-    compressionPriorities?: CompressionPriorityMap,
 ): void => {
     if (compressPermission(state, config) === "deny") {
         return
@@ -163,14 +162,7 @@ export const injectMessageIds = (
         }
 
         const isBlockedMessage = isProtectedUserMessage(config, message)
-        const priority =
-            config.compress.mode === "message" && !isBlockedMessage
-                ? compressionPriorities?.get(message.info.id)?.priority
-                : undefined
-        const tag = formatMessageIdTag(
-            isBlockedMessage ? "BLOCKED" : messageRef,
-            priority ? { priority } : undefined,
-        )
+        const tag = formatMessageIdTag(isBlockedMessage ? "BLOCKED" : messageRef)
 
         if (message.info.role === "user") {
             let injected = false

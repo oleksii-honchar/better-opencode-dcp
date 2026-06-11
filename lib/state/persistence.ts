@@ -31,6 +31,7 @@ export interface PersistedNudges {
     contextLimitAnchors: string[]
     turnNudgeAnchors?: string[]
     iterationNudgeAnchors?: string[]
+    nudgedMessageIds?: string[]
 }
 
 export interface PersistedSessionState {
@@ -96,6 +97,7 @@ export async function saveSessionState(
                 contextLimitAnchors: Array.from(sessionState.nudges.contextLimitAnchors),
                 turnNudgeAnchors: Array.from(sessionState.nudges.turnNudgeAnchors),
                 iterationNudgeAnchors: Array.from(sessionState.nudges.iterationNudgeAnchors),
+                nudgedMessageIds: Array.from(sessionState.nudges.nudgedMessageIds),
             },
             stats: sessionState.stats,
             lastUpdated: new Date().toISOString(),

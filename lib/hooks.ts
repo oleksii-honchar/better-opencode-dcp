@@ -9,7 +9,6 @@ import {
     injectExtendedSubAgentResults,
     injectMessageIds,
     prune,
-    stripHallucinations,
     stripHallucinationsFromString,
     stripStaleMetadata,
     syncCompressionBlocks,
@@ -128,7 +127,6 @@ export function createChatMessageTransformHandler(
             return
         }
 
-        stripHallucinations(output.messages)
         cacheSystemPromptTokens(state, output.messages)
         assignMessageRefs(state, output.messages)
         syncCompressionBlocks(state, logger, output.messages)
@@ -162,7 +160,7 @@ export function createChatMessageTransformHandler(
             output.messages,
         )
         state.overMinLimit = overMinLimit
-        injectMessageIds(state, config, output.messages, compressionPriorities)
+        injectMessageIds(state, config, output.messages)
         applyPendingManualTrigger(state, output.messages, logger)
         stripStaleMetadata(output.messages)
 
