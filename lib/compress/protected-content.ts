@@ -191,8 +191,24 @@ export async function appendProtectedTools(
                         }
                     }
 
+                    // Extract arguments from part.state.input
+                    let argumentsText = ""
+                    if (part.state?.input) {
+                        const input = part.state.input
+                        argumentsText =
+                            typeof input === "string" ? input : JSON.stringify(input)
+                    }
+
+                    const parts: string[] = []
+                    if (argumentsText) {
+                        parts.push(`Arguments: ${argumentsText}`)
+                    }
                     if (output) {
-                        protectedOutputs.push(`\n### ${title}\n${output}`)
+                        parts.push(output)
+                    }
+
+                    if (parts.length > 0) {
+                        protectedOutputs.push(`\n### ${title}\n${parts.join("\n")}`)
                     }
                 }
             }
